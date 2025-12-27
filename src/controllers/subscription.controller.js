@@ -1,8 +1,10 @@
+import { SERVER_URL } from "../config/env.js";
+import mongoose from "mongoose";
 import Subscription from "../models/subscription.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { apiError } from "../utils/apiError.js";
 import { apiResponse } from "../utils/apiResponse.js";
-import mongoose from "mongoose";
+import { workflowClient } from "../config/upstash.js";
 
 export const createSubscription = asyncHandler(async (req, res) => {
   const { name, price, frequency, category, paymentMethod, startDate } =
@@ -28,10 +30,23 @@ export const createSubscription = asyncHandler(async (req, res) => {
 
   if (!subscription) throw new apiError(500, "Error creating subscription!!");
 
+  const { workflowRunId } = await workflowClient.trigger({
+    url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
+    body: {
+      subscriptionId: subscription.id,
+    },
+    headers: { "content-type": "application/json" },
+    retries: 0,
+  });
+
   return res
     .status(201)
     .json(
-      new apiResponse(201, subscription, "Subscription created successfully!!")
+      new apiResponse(
+        201,
+        { subscription, workflowRunId },
+        "Subscription created successfully!!"
+      )
     );
 });
 export const getSubscription = asyncHandler(async (req, res) => {
